@@ -95,18 +95,36 @@ class DB:
     def _number(value) -> str:
         try:
             number = float(value)
-            return str(number) if number == number else "0"
+            return f"{number:.2f}" if number == number else "0"
         except (TypeError, ValueError):
             return "0"
+
+    @staticmethod
+    def _decimal_text(value, default="0.00") -> str:
+        """将写入 EAV 文本值的浮点数规范为两位小数。"""
+        try:
+            number = float(value)
+            return f"{number:.2f}" if number == number else default
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
+    def _optional_decimal_text(cls, value, default="") -> str:
+        if value is None or str(value).strip() == "":
+            return default
+        return cls._decimal_text(value, default=default or "0.00")
 
     def insert_monthly_data(self, data: dict):
         month_key = data.get('month') or data.get('date', '')
         self._execute(
             f"INSERT OR REPLACE INTO {self.table_expand_name} VALUES"
             f"('month_{month_key}', "
-            f"'{data.get('total_usage', 0)}|{data.get('total_charge', 0)}|"
-            f"{data.get('valley_usage', '')}|{data.get('flat_usage', '')}|"
-            f"{data.get('peak_usage', '')}|{data.get('tip_usage', '')}|"
+            f"'{self._decimal_text(data.get('total_usage', 0))}|"
+            f"{self._decimal_text(data.get('total_charge', 0))}|"
+            f"{self._optional_decimal_text(data.get('valley_usage'))}|"
+            f"{self._optional_decimal_text(data.get('flat_usage'))}|"
+            f"{self._optional_decimal_text(data.get('peak_usage'))}|"
+            f"{self._optional_decimal_text(data.get('tip_usage'))}|"
             f"{data.get('user_name', '')}')")
 
     def insert_yearly_data(self, data: dict):
@@ -216,8 +234,10 @@ class SqliteDB(DB):
         ).fetchone()
         parts = (row[0] or "").split("|") if row else [str(float(tou_data.get("total_usage", 0) or 0)), "0"]
         parts += [""] * (7 - len(parts))
+        parts[0] = self._decimal_text(parts[0])
+        parts[1] = self._decimal_text(parts[1])
         for index, field in enumerate(("valley_usage", "flat_usage", "peak_usage", "tip_usage"), start=2):
-            parts[index] = str(float(tou_data.get(field, 0) or 0))
+            parts[index] = self._decimal_text(tou_data.get(field, 0) or 0)
         if user_name:
             parts[6] = user_name
         self._conn.execute(
@@ -329,8 +349,10 @@ class MysqlDB(DB):
             cursor.close()
         parts = (row[0] or "").split("|") if row else [str(float(tou_data.get("total_usage", 0) or 0)), "0"]
         parts += [""] * (7 - len(parts))
+        parts[0] = self._decimal_text(parts[0])
+        parts[1] = self._decimal_text(parts[1])
         for index, field in enumerate(("valley_usage", "flat_usage", "peak_usage", "tip_usage"), start=2):
-            parts[index] = str(float(tou_data.get(field, 0) or 0))
+            parts[index] = self._decimal_text(tou_data.get(field, 0) or 0)
         if user_name:
             parts[6] = user_name
         self._execute(
