@@ -1180,11 +1180,39 @@ class DataFetcher:
 
         # ── 电费账单明细（仅 Vue state，无 DOM 兜底） ──
         bill_tou_data = None
-        if self.db is not None:
-            try:
-                bill_tou_data = self._get_bill_detail(user_id)
-            except Exception as e:
-                logging.warning(f"[{user_id}] 电费账单分时数据获取失败: {e}")
+        try:
+            bill_tou_data = self._get_bill_detail(user_id)
+        except Exception as e:
+            logging.warning(f"[{user_id}] 电费账单分时数据获取失败: {e}")
+
+        # 国网年度汇总有时只统计到上一个完整账期，当前月数据只出现在账单明细中。
+        # 用账单明细补齐当月月度值，并在年度列表未包含该月时并入年度汇总。
+        if bill_tou_data and bill_tou_data.get("month"):
+            bill_month = bill_tou_data["month"]
+            bill_usage = bill_tou_data.get("usage")
+            bill_charge = bill_tou_data.get("charge")
+            if month is None:
+                month, month_usage, month_charge = [], [], []
+            month_indexes = [i for i, value in enumerate(month) if value == bill_month]
+            if month_indexes:
+                index = month_indexes[-1]
+                if bill_usage is not None:
+                    month_usage[index] = str(bill_usage)
+                if bill_charge is not None:
+                    month_charge[index] = str(bill_charge)
+            else:
+                month.append(bill_month)
+                month_usage.append(str(bill_usage) if bill_usage is not None else "")
+                month_charge.append(str(bill_charge) if bill_charge is not None else "")
+
+                if yearly_usage is not None and bill_usage is not None:
+                    yearly_usage = float(yearly_usage) + float(bill_usage)
+                if yearly_charge is not None and bill_charge is not None:
+                    yearly_charge = float(yearly_charge) + float(bill_charge)
+                logging.info(
+                    f"[{user_id}] 年度汇总补入当前账期 {bill_month}: "
+                    f"用电={bill_usage}, 电费={bill_charge}"
+                )
 
         # ── 数据库存储 ──
         if self.db is not None:
