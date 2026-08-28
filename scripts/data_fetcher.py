@@ -1107,6 +1107,9 @@ class DataFetcher:
             logging.warning(f"[{user_id}] 用电量页面用户切换失败 (非致命): {e}")
         time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT)
 
+        # 先选择近7天/近30天，再读取 Vue 状态；否则页面可能仍返回默认的7天。
+        self._select_daily_range()
+
         # ── Vue state 优先：一次性提取年度/月度/每日/分时数据 ──
         usage_info = None
         enhanced_balance = None
@@ -1421,11 +1424,49 @@ class DataFetcher:
             logging.error(f"月度数据获取失败: {e}")
             return None, None, None
 
+    def _select_daily_range(self):
+        """在读取 Vue 状态前选择配置的每日数据范围。"""
+        fetch_days = int(os.getenv(
+            "DAILY_FETCH_DAYS",
+            os.getenv("DATA_RETENTION_DAYS", "7"),
+        ))
+        if fetch_days not in (7, 30):
+            fetch_days = 7
+        self._click_button(
+            self._page,
+            "xpath=//div[@class='el-tabs__nav is-top']/div[@id='tab-second']",
+        )
+        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT * 2)
+        if fetch_days == 30:
+            try:
+                radio = self._page.query_selector(
+                    "xpath="
+                    "//span[contains(@class,'el-radio__label') and contains(text(),'近30天')]"
+                    "/preceding-sibling::span//input[@class='el-radio__original']"
+                )
+                radio.click()
+                logging.info("已选择 '近30天'，准备读取 Vue 每日数据")
+            except Exception:
+                try:
+                    self._click_button(
+                        self._page,
+                        "xpath=//*[@id='pane-second']//label[2]//span[@class='el-radio__input']",
+                    )
+                    logging.info("已通过备用选择器选择 '近30天'")
+                except Exception:
+                    logging.warning("未找到 '近30天' 选项，继续使用页面当前范围")
+        else:
+            logging.info("已选择 '近7天' 数据范围")
+        time.sleep(self.RETRY_WAIT_TIME_OFFSET_UNIT * 3)
+
     # 增加获取每日用电量的函数
     def _get_daily_usage_data(self):
         """获取每日用电量数据 (7天或30天)，通过 radio 按钮切换，失败时返回空列表"""
         try:
-            fetch_days = int(os.getenv("DAILY_FETCH_DAYS", 7))
+            fetch_days = int(os.getenv(
+                "DAILY_FETCH_DAYS",
+                os.getenv("DATA_RETENTION_DAYS", "7"),
+            ))
             if fetch_days not in (7, 30):
                 fetch_days = 7
             logging.info(f"正在获取每日用电量数据 (最近 {fetch_days} 天)")
@@ -1667,6 +1708,23 @@ class DataFetcher:
             self.db.cleanup_old_data()
             logging.info(f"[{user_id}] 数据清理完成")
 
+            # 汇总数据库中当前月份的全部每日数据，并同步回写月度记录。
+            if tou_data is not None:
+                month_prefix = datetime.now().strftime("%Y-%m")
+                tou_data["monthly_tou"] = self.db.sum_daily_tou_usage(month_prefix)
+                logging.info(
+                    f"[{user_id}] 数据库本月分时汇总: "
+                    f"总={tou_data['monthly_tou']['total_usage']}, "
+                    f"谷={tou_data['monthly_tou']['valley_usage']}, "
+                    f"平={tou_data['monthly_tou']['flat_usage']}, "
+                    f"峰={tou_data['monthly_tou']['peak_usage']}, "
+                    f"尖={tou_data['monthly_tou']['tip_usage']}"
+                )
+                self.db.upsert_monthly_tou_usage(
+                    month_prefix, tou_data["monthly_tou"], user_name
+                )
+                logging.info(f"[{user_id}] 月度分时汇总已回写: month_{month_prefix}")
+
         except Exception as e:
             logging.error(f"[{user_id}] 数据保存过程出错: {e}")
         finally:
@@ -1677,4 +1735,3 @@ if __name__ == "__main__":
         test1 = f.read()
         print(type(test1))
         print(test1)
-

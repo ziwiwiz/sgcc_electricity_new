@@ -304,8 +304,14 @@ class SensorUpdator:
             ("tip_usage", MONTH_TIP_SENSOR_NAME, "尖"),
         ]
 
-        # 优先：账单分时数据
-        if bill_tou_data:
+        # 优先使用写库后的整月每日汇总，确保传感器值与数据库一致。
+        monthly_tou = tou_data.get("monthly_tou") if tou_data else None
+        if monthly_tou is not None:
+            tou_values = {
+                field: float(monthly_tou.get(field, 0) or 0)
+                for field, _, _ in tou_fields
+            }
+        elif bill_tou_data:
             tou_values = {
                 "valley_usage": bill_tou_data.get("valley_usage"),
                 "flat_usage": bill_tou_data.get("flat_usage"),
@@ -329,9 +335,7 @@ class SensorUpdator:
             return
 
         for field_key, sensor_base, label in tou_fields:
-            value = tou_values.get(field_key, 0)
-            if not value or value <= 0:
-                continue
+            value = max(0.0, float(tou_values.get(field_key, 0) or 0))
             sensorName = sensor_base + postfix
             if not self.should_update(sensorName, value, {"last_reset": last_reset}):
                 logging.info(f"跳过 {sensorName} 的更新，状态相同。")
