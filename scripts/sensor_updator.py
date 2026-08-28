@@ -38,6 +38,7 @@ class SensorUpdator:
             self.update_balance(postfix, balance, enhanced_balance)
         if last_daily_usage is not None:
             self.update_last_daily_usage(postfix, last_daily_date, last_daily_usage)
+        self._update_recent_tou_sensors(postfix, tou_data)
         if yearly_usage is not None:
             self.update_yearly_data(postfix, yearly_usage, usage=True)
         if yearly_charge is not None:
@@ -197,6 +198,41 @@ class SensorUpdator:
 
         self.send_url(sensorName, request_body)
         logging.info(f"Home Assistant 传感器 {sensorName} 状态已更新: {sensorState} kWh")
+
+    def _update_recent_tou_sensors(self, postfix: str, tou_data: dict = None):
+        """推送最新国网日期当天的谷/峰电量。"""
+        daily_rows = (tou_data or {}).get("daily", [])
+        if not daily_rows:
+            return
+
+        rows = sorted(daily_rows, key=lambda row: str(row.get("date", "")))
+        latest = rows[-1]
+        common_attributes = {
+            "last_reset": latest.get("date", ""),
+            "unit_of_measurement": "kWh",
+            "icon": "mdi:lightning-bolt",
+            "device_class": "energy",
+            "state_class": "measurement",
+            "latest_date": latest.get("date", ""),
+            "latest_total_usage": latest.get("total_usage", 0),
+        }
+
+        for field, sensor_base, label, icon in (
+            ("valley_usage", LAST_VALLEY_USAGE_SENSOR_NAME, "最近谷电量", "mdi:weather-night"),
+            ("peak_usage", LAST_PEAK_USAGE_SENSOR_NAME, "最近峰电量", "mdi:weather-sunny"),
+        ):
+            sensor_name = sensor_base + postfix
+            value = float(latest.get(field, 0) or 0)
+            attributes = {**common_attributes, "friendly_name": label, "icon": icon}
+            if not self.should_update(sensor_name, value, attributes):
+                logging.info(f"跳过 {sensor_name} 的更新，状态相同。")
+                continue
+            self.send_url(sensor_name, {
+                "state": value,
+                "unique_id": sensor_name,
+                "attributes": attributes,
+            })
+            logging.info(f"Home Assistant 传感器 {sensor_name} 状态已更新: {value} kWh ({latest.get('date')})")
 
     def update_balance(self, postfix: str, sensorState: float, enhanced_balance: dict = None):
         sensorName = BALANCE_SENSOR_NAME + postfix

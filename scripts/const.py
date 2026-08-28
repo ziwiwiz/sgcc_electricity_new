@@ -16,6 +16,8 @@ API_PATH = "/api/states/"
 
 BALANCE_SENSOR_NAME = "sensor.electricity_charge_balance"
 DAILY_USAGE_SENSOR_NAME = "sensor.last_electricity_usage"
+LAST_VALLEY_USAGE_SENSOR_NAME = "sensor.last_valley_electricity_usage"
+LAST_PEAK_USAGE_SENSOR_NAME = "sensor.last_peak_electricity_usage"
 YEARLY_USAGE_SENSOR_NAME = "sensor.yearly_electricity_usage"
 YEARLY_CHARGE_SENSOR_NAME = "sensor.yearly_electricity_charge"
 MONTH_USAGE_SENSOR_NAME = "sensor.month_electricity_usage"
@@ -40,4 +42,3 @@ def get_data_dir() -> str:
     data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
     os.makedirs(data_dir, exist_ok=True)
     return data_dir
-

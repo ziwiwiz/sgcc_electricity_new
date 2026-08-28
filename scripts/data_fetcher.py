@@ -1428,10 +1428,10 @@ class DataFetcher:
         """在读取 Vue 状态前选择配置的每日数据范围。"""
         fetch_days = int(os.getenv(
             "DAILY_FETCH_DAYS",
-            os.getenv("DATA_RETENTION_DAYS", "7"),
+            "30",
         ))
-        if fetch_days not in (7, 30):
-            fetch_days = 7
+        if fetch_days != 30:
+            fetch_days = 30
         self._click_button(
             self._page,
             "xpath=//div[@class='el-tabs__nav is-top']/div[@id='tab-second']",
