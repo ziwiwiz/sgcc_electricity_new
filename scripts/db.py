@@ -78,8 +78,8 @@ class DB:
         self._execute(
             f"INSERT OR REPLACE INTO {self.table_expand_name} VALUES"
             f"('balance_{data.get('date', 'latest')}', "
-            f"'{data.get('balance', 0)}|{data.get('user_name', '')}|"
-            f"{data.get('as_of', '')}|{data.get('amount_due', '')}')")
+            f"'{self._decimal_text(data.get('balance', 0))}|{data.get('user_name', '')}|"
+            f"{data.get('as_of', '')}|{self._optional_decimal_text(data.get('amount_due'))}')")
 
     def insert_daily_data(self, data: dict):
         self._execute(
@@ -98,6 +98,15 @@ class DB:
             return f"{number:.2f}" if number == number else "0"
         except (TypeError, ValueError):
             return "0"
+
+    @staticmethod
+    def _rounded_float(value, default=0.0) -> float:
+        """将数据库聚合结果规范为两位小数，避免二进制浮点尾数外露。"""
+        try:
+            number = float(value)
+            return round(number, 2) if number == number else default
+        except (TypeError, ValueError):
+            return default
 
     @staticmethod
     def _decimal_text(value, default="0.00") -> str:
@@ -131,7 +140,8 @@ class DB:
         self._execute(
             f"INSERT OR REPLACE INTO {self.table_expand_name} VALUES"
             f"('year_{data.get('year', '')}', "
-            f"'{data.get('total_usage', 0)}|{data.get('total_charge', 0)}|"
+            f"'{self._decimal_text(data.get('total_usage', 0))}|"
+            f"{self._decimal_text(data.get('total_charge', 0))}|"
             f"{data.get('user_name', '')}')")
 
     def insert_data(self, data: dict):
@@ -220,11 +230,11 @@ class SqliteDB(DB):
             (f"{month_prefix}%",),
         ).fetchone()
         return {
-            "total_usage": float(row[0] or 0),
-            "valley_usage": float(row[1] or 0),
-            "flat_usage": float(row[2] or 0),
-            "peak_usage": float(row[3] or 0),
-            "tip_usage": float(row[4] or 0),
+            "total_usage": self._rounded_float(row[0]),
+            "valley_usage": self._rounded_float(row[1]),
+            "flat_usage": self._rounded_float(row[2]),
+            "peak_usage": self._rounded_float(row[3]),
+            "tip_usage": self._rounded_float(row[4]),
         }
 
     def upsert_monthly_tou_usage(self, month_prefix: str, tou_data: dict, user_name: str = ""):
@@ -329,11 +339,11 @@ class MysqlDB(DB):
         finally:
             cursor.close()
         return {
-            "total_usage": float(row[0] or 0),
-            "valley_usage": float(row[1] or 0),
-            "flat_usage": float(row[2] or 0),
-            "peak_usage": float(row[3] or 0),
-            "tip_usage": float(row[4] or 0),
+            "total_usage": self._rounded_float(row[0]),
+            "valley_usage": self._rounded_float(row[1]),
+            "flat_usage": self._rounded_float(row[2]),
+            "peak_usage": self._rounded_float(row[3]),
+            "tip_usage": self._rounded_float(row[4]),
         }
 
     def upsert_monthly_tou_usage(self, month_prefix: str, tou_data: dict, user_name: str = ""):

@@ -1714,11 +1714,11 @@ class DataFetcher:
                 tou_data["monthly_tou"] = self.db.sum_daily_tou_usage(month_prefix)
                 logging.info(
                     f"[{user_id}] 数据库本月分时汇总: "
-                    f"总={tou_data['monthly_tou']['total_usage']}, "
-                    f"谷={tou_data['monthly_tou']['valley_usage']}, "
-                    f"平={tou_data['monthly_tou']['flat_usage']}, "
-                    f"峰={tou_data['monthly_tou']['peak_usage']}, "
-                    f"尖={tou_data['monthly_tou']['tip_usage']}"
+                    f"总={tou_data['monthly_tou']['total_usage']:.2f}, "
+                    f"谷={tou_data['monthly_tou']['valley_usage']:.2f}, "
+                    f"平={tou_data['monthly_tou']['flat_usage']:.2f}, "
+                    f"峰={tou_data['monthly_tou']['peak_usage']:.2f}, "
+                    f"尖={tou_data['monthly_tou']['tip_usage']:.2f}"
                 )
                 self.db.upsert_monthly_tou_usage(
                     month_prefix, tou_data["monthly_tou"], user_name

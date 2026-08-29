@@ -203,6 +203,7 @@ def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
         text = str(value).strip()
         if text in ("", "-", "—", "None"):
             return default
-        return float(text)
+        number = float(text)
+        return round(number, 2) if number == number else default
     except (TypeError, ValueError):
         return default
