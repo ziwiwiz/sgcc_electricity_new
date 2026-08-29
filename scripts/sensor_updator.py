@@ -9,6 +9,15 @@ from const import *
 
 class SensorUpdator:
 
+    @staticmethod
+    def _rounded(value, default=0.0):
+        """统一 HA 数值状态精度，避免 Python 浮点尾数进入实体状态。"""
+        try:
+            number = float(value)
+            return round(number, 2) if number == number else default
+        except (TypeError, ValueError):
+            return default
+
     def __init__(self):
         HASS_URL = os.getenv("HASS_URL")
         HASS_TOKEN = os.getenv("HASS_TOKEN")
@@ -30,6 +39,12 @@ class SensorUpdator:
 
     def update_one_userid(self, user_id: str, balance: float, last_daily_date: str, last_daily_usage: float, yearly_charge: float, yearly_usage: float, month_charge: float, month_usage: float, tou_data: dict = None, enhanced_balance: dict = None, bill_tou_data: dict = None, notify=True):
         logging.info(f"[{user_id}] 开始更新 Home Assistant 传感器数据...")
+        balance = self._rounded(balance, None) if balance is not None else None
+        last_daily_usage = self._rounded(last_daily_usage, None) if last_daily_usage is not None else None
+        yearly_charge = self._rounded(yearly_charge, None) if yearly_charge is not None else None
+        yearly_usage = self._rounded(yearly_usage, None) if yearly_usage is not None else None
+        month_charge = self._rounded(month_charge, None) if month_charge is not None else None
+        month_usage = self._rounded(month_usage, None) if month_usage is not None else None
         self._save_to_cache(user_id, balance, last_daily_date, last_daily_usage, yearly_charge, yearly_usage, month_charge, month_usage, tou_data, enhanced_balance, bill_tou_data)
         postfix = f"_{user_id[-4:]}"
         if balance is not None:
@@ -214,7 +229,7 @@ class SensorUpdator:
             "device_class": "energy",
             "state_class": "measurement",
             "latest_date": latest.get("date", ""),
-            "latest_total_usage": latest.get("total_usage", 0),
+            "latest_total_usage": self._rounded(latest.get("total_usage", 0)),
         }
 
         for field, sensor_base, label, icon in (
@@ -222,7 +237,7 @@ class SensorUpdator:
             ("peak_usage", LAST_PEAK_USAGE_SENSOR_NAME, "最近峰电量", "mdi:weather-sunny"),
         ):
             sensor_name = sensor_base + postfix
-            value = float(latest.get(field, 0) or 0)
+            value = self._rounded(latest.get(field, 0) or 0)
             attributes = {**common_attributes, "friendly_name": label, "icon": icon}
             if not self.should_update(sensor_name, value, attributes):
                 logging.info(f"跳过 {sensor_name} 的更新，状态相同。")
@@ -236,6 +251,7 @@ class SensorUpdator:
 
     def update_balance(self, postfix: str, sensorState: float, enhanced_balance: dict = None):
         sensorName = BALANCE_SENSOR_NAME + postfix
+        sensorState = self._rounded(sensorState)
 
         if not self.should_update(sensorName, sensorState):
              logging.info(f"跳过 {sensorName} 的更新，状态相同。")
@@ -251,7 +267,7 @@ class SensorUpdator:
         }
         if enhanced_balance:
             if enhanced_balance.get("amount_due") is not None:
-                attributes["amount_due"] = enhanced_balance["amount_due"]
+                attributes["amount_due"] = self._rounded(enhanced_balance["amount_due"])
 
         request_body = {
             "state": sensorState,
@@ -268,6 +284,7 @@ class SensorUpdator:
             if usage
             else MONTH_CHARGE_SENSOR_NAME + postfix
         )
+        sensorState = self._rounded(sensorState)
         current_date = datetime.now()
         first_day_of_current_month = current_date.replace(day=1)
         last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
@@ -298,6 +315,7 @@ class SensorUpdator:
             if usage
             else YEARLY_CHARGE_SENSOR_NAME + postfix
         )
+        sensorState = self._rounded(sensorState)
         if datetime.now().month == 1:
             last_year = datetime.now().year -1
             last_reset = datetime.now().replace(year=last_year).strftime("%Y")
@@ -371,7 +389,7 @@ class SensorUpdator:
             return
 
         for field_key, sensor_base, label in tou_fields:
-            value = max(0.0, float(tou_values.get(field_key, 0) or 0))
+            value = round(max(0.0, float(tou_values.get(field_key, 0) or 0)), 2)
             sensorName = sensor_base + postfix
             if not self.should_update(sensorName, value, {"last_reset": last_reset}):
                 logging.info(f"跳过 {sensorName} 的更新，状态相同。")
@@ -394,6 +412,7 @@ class SensorUpdator:
     def update_prepay_balance(self, postfix: str, sensorState: float):
         """更新预付费余额传感器"""
         sensorName = PREPAY_BALANCE_SENSOR_NAME + postfix
+        sensorState = self._rounded(sensorState)
         if not self.should_update(sensorName, sensorState):
             logging.info(f"跳过 {sensorName} 的更新，状态相同。")
             return
